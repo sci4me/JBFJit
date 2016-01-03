@@ -9,4 +9,4 @@ clean:
 	rm -rf bin
 
 run: all
-	java -cp bin:lib/* com/sci/jbfjit/Main progs/hanoi.bf
+	java -cp bin:lib/* com/sci/jbfjit/Main progs/mand.bf

@@ -34,6 +34,11 @@ public final class JIT {
 		return null;
 	}
 	
+	private static void generateFields(final ClassWriter cw) {
+		cw.visitField(ACC_PRIVATE | ACC_SYNTHETIC, "data", "[I", null, null).visitEnd();
+		cw.visitField(ACC_PRIVATE | ACC_SYNTHETIC, "dp", "I", null, null).visitEnd();
+	}
+	
 	private static void generateConstructor(final ClassWriter cw) {
         final MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
 		
@@ -48,11 +53,6 @@ public final class JIT {
         mv.visitMaxs(0, 0);
         mv.visitEnd();
     }
-	
-	private static void generateFields(final ClassWriter cw) {
-		cw.visitField(ACC_PRIVATE | ACC_SYNTHETIC, "data", "[I", null, null).visitEnd();
-		cw.visitField(ACC_PRIVATE | ACC_SYNTHETIC, "dp", "I", null, null).visitEnd();
-	}
 	
 	private static void generateRun(final ClassWriter cw, final List<Instruction> ir) {
 		final MethodVisitor rmv = cw.visitMethod(ACC_PUBLIC | ACC_SYNTHETIC, "run", "()V", null, null);
