@@ -12,20 +12,25 @@ import com.sci.jbfjit.ir.insn.*;
 
 public final class JIT {
 	private static final JITClassLoader classLoader = new JITClassLoader();
-	private static final String CLASS_NAME = "JittedBFCode";
+	private static final String CLASS_NAME_PREFIX = "JittedBFCode$";
+	
+	private static int counter;
 	
 	public static Runnable jit(final List<Instruction> ir) {
 		final ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		
-		cw.visit(52, ACC_PUBLIC | ACC_SUPER | ACC_SYNTHETIC, CLASS_NAME, null, "java/lang/Object", new String[]{Type.getInternalName(Runnable.class)});
+		final String className = CLASS_NAME_PREFIX + JIT.counter;
+		JIT.counter++;
+		
+		cw.visit(52, ACC_PUBLIC | ACC_SUPER | ACC_SYNTHETIC, className, null, "java/lang/Object", new String[]{Type.getInternalName(Runnable.class)});
 		cw.visitSource(null, null);
 		
 		JIT.generateFields(cw);
-		JIT.generateConstructor(cw);
-		JIT.generateRun(cw, ir);
+		JIT.generateConstructor(cw, className);
+		JIT.generateRun(cw, ir, className);
 		
 		try {
-			return (Runnable) JIT.classLoader.loadClass(CLASS_NAME, cw.toByteArray()).newInstance();
+			return (Runnable) JIT.classLoader.loadClass(className, cw.toByteArray()).newInstance();
 		} catch(final Throwable t) {
 			t.printStackTrace();
 			System.exit(1);
@@ -39,13 +44,13 @@ public final class JIT {
 		cw.visitField(ACC_PRIVATE | ACC_SYNTHETIC, "dp", "I", null, null).visitEnd();
 	}
 	
-	private static void generateConstructor(final ClassWriter cw) {
+	private static void generateConstructor(final ClassWriter cw, final String className) {
         final MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
 		
 		mv.visitVarInsn(ALOAD, 0);
 		mv.visitLdcInsn(30000);
 		mv.visitIntInsn(NEWARRAY, T_INT);
-		mv.visitFieldInsn(PUTFIELD, CLASS_NAME, "data", "[I");
+		mv.visitFieldInsn(PUTFIELD, className, "data", "[I");
 		
         mv.visitVarInsn(ALOAD, 0);
         mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
@@ -54,11 +59,11 @@ public final class JIT {
         mv.visitEnd();
     }
 	
-	private static void generateRun(final ClassWriter cw, final List<Instruction> ir) {
+	private static void generateRun(final ClassWriter cw, final List<Instruction> ir, final String className) {
 		final MethodVisitor rmv = cw.visitMethod(ACC_PUBLIC | ACC_SYNTHETIC, "run", "()V", null, null);
 
 		rmv.visitVarInsn(ALOAD, 0);
-		rmv.visitMethodInsn(INVOKEVIRTUAL, CLASS_NAME, "m0", "()V");
+		rmv.visitMethodInsn(INVOKEVIRTUAL, className, "m0", "()V");
 
 		final LoopHolder loopHolder = new LoopHolder();
 
@@ -71,12 +76,12 @@ public final class JIT {
 			if(insn instanceof Open) {
 				methods.push(mv);
 			
-				JIT.generateInstruction(mv, insn, loopHolder);
+				JIT.generateInstruction(mv, insn, loopHolder, className);
 				
 				methodIndex++;
 				
 				mv.visitVarInsn(ALOAD, 0);
-				mv.visitMethodInsn(INVOKEVIRTUAL, CLASS_NAME, "m" + methodIndex, "()V");
+				mv.visitMethodInsn(INVOKEVIRTUAL, className, "m" + methodIndex, "()V");
 				
 				mv = cw.visitMethod(ACC_PRIVATE | ACC_SYNTHETIC, "m" + methodIndex, "()V", null, null);
 			} else if(insn instanceof Close) {
@@ -86,9 +91,9 @@ public final class JIT {
 				
 				mv = methods.pop();
 				
-				JIT.generateInstruction(mv, insn, loopHolder);
+				JIT.generateInstruction(mv, insn, loopHolder, className);
 			} else {
-				JIT.generateInstruction(mv, insn, loopHolder);
+				JIT.generateInstruction(mv, insn, loopHolder, className);
 			}
 		}	
 		mv.visitInsn(RETURN);
@@ -100,12 +105,12 @@ public final class JIT {
 		rmv.visitEnd();
 	}
 	
-	public static void generateInstruction(final MethodVisitor mv, final Instruction insn, final LoopHolder loopHolder) {
+	public static void generateInstruction(final MethodVisitor mv, final Instruction insn, final LoopHolder loopHolder, final String className) {
 		if(insn instanceof Add) {
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitInsn(DUP2);
 			mv.visitInsn(IALOAD);
 			mv.visitLdcInsn(((Add) insn).getCount());
@@ -113,9 +118,9 @@ public final class JIT {
 			mv.visitInsn(IASTORE);
 		} else if(insn instanceof Sub) {
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitInsn(DUP2);
 			mv.visitInsn(IALOAD);
 			mv.visitLdcInsn(((Sub) insn).getCount());
@@ -124,30 +129,30 @@ public final class JIT {
 		} else if(insn instanceof Right) {
 			mv.visitVarInsn(ALOAD, 0);
 			mv.visitInsn(DUP);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitLdcInsn(((Right) insn).getCount());
 			mv.visitInsn(IADD);
-			mv.visitFieldInsn(PUTFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(PUTFIELD, className, "dp", "I");
 		} else if(insn instanceof Left) {
 			mv.visitVarInsn(ALOAD, 0);
 			mv.visitInsn(DUP);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitLdcInsn(((Left) insn).getCount());
 			mv.visitInsn(ISUB);
-			mv.visitFieldInsn(PUTFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(PUTFIELD, className, "dp", "I");
 		} else if(insn instanceof In) {
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitMethodInsn(INVOKESTATIC, "com/sci/jbfjit/jit/JIT", "getchar", "()I");
 			mv.visitInsn(IASTORE);
 		} else if(insn instanceof Out) {
 			mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitInsn(IALOAD);
 			mv.visitInsn(I2C);
 			mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "print", "(C)V");
@@ -159,17 +164,17 @@ public final class JIT {
 			loopHolder.loop = loop;
 			
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitInsn(IALOAD);
 			mv.visitJumpInsn(IFEQ, loop.end);
 			mv.visitLabel(loop.start);
 		} else if(insn instanceof Close) {
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitInsn(IALOAD);
 			mv.visitJumpInsn(IFNE, loopHolder.loop.start);
 			mv.visitLabel(loopHolder.loop.end);
@@ -177,9 +182,9 @@ public final class JIT {
 			loopHolder.loop = loopHolder.loop.prev;
 		} else if(insn instanceof Set) {
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "data", "[I");
+			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
 			mv.visitVarInsn(ALOAD, 0);
-			mv.visitFieldInsn(GETFIELD, CLASS_NAME, "dp", "I");
+			mv.visitFieldInsn(GETFIELD, className, "dp", "I");
 			mv.visitLdcInsn(((Set) insn).getValue());
 			mv.visitInsn(IASTORE);	
 		}
