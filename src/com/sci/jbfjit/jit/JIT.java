@@ -2,7 +2,8 @@ package com.sci.jbfjit.jit;
 
 import java.io.*;
 import java.util.List;
-import java.util.Stack;
+import java.util.Deque;
+import java.util.ArrayDeque;
 
 import org.objectweb.asm.*;
 import static org.objectweb.asm.Opcodes.*;
@@ -67,7 +68,7 @@ public final class JIT {
 
 		final LoopHolder loopHolder = new LoopHolder();
 
-		final Stack<MethodVisitor> methods = new Stack<>();
+		final Deque<MethodVisitor> methods = new ArrayDeque<>();
 		MethodVisitor mv = cw.visitMethod(ACC_PRIVATE | ACC_SYNTHETIC, "m0", "()V", null, null);
 		int methodIndex = 0;
 		for(int i = 0; i < ir.size(); i++) {
@@ -157,8 +158,11 @@ public final class JIT {
 			mv.visitInsn(I2C);
 			mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "print", "(C)V");
 		} else if(insn instanceof Open) {
+			if(loopHolder.loop != null) {
+				loopHolder.loops.push(loopHolder.loop);
+			}
+			
 			final Loop loop = new Loop();
-			loop.prev = loopHolder.loop;
 			loop.start = new Label();
 			loop.end = new Label();
 			loopHolder.loop = loop;
@@ -179,7 +183,9 @@ public final class JIT {
 			mv.visitJumpInsn(IFNE, loopHolder.loop.start);
 			mv.visitLabel(loopHolder.loop.end);
 			
-			loopHolder.loop = loopHolder.loop.prev;
+			if(!loopHolder.loops.isEmpty()) {
+				loopHolder.loop = loopHolder.loops.pop();
+			}
 		} else if(insn instanceof Set) {
 			mv.visitVarInsn(ALOAD, 0);
 			mv.visitFieldInsn(GETFIELD, className, "data", "[I");
@@ -191,12 +197,15 @@ public final class JIT {
 	}
 	
 	private static class LoopHolder {
+		public Deque<Loop> loops;
 		public Loop loop;
+		
+		public LoopHolder() {
+			this.loops = new ArrayDeque<>();
+		}
 	}
 	
 	private static class Loop {
-		public Loop prev;
-		
 		public Label start;
 		public Label end;
 	}
